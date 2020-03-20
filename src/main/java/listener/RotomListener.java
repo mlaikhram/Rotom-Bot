@@ -1,6 +1,8 @@
 package listener;
 
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.MessageBuilder;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -10,8 +12,14 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import util.MessageUtils;
 
-import java.io.IOException;
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
+import java.io.*;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class RotomListener extends ListenerAdapter {
@@ -43,7 +51,7 @@ public class RotomListener extends ListenerAdapter {
         }
 
         String myID = jda.getSelfUser().getId();
-        System.out.println("my id: " + myID);
+//        System.out.println("my id: " + myID);
         User author = event.getAuthor();
         MessageChannel sourceChannel = event.getChannel();
         String rawMessage = event.getMessage().getContentRaw();
@@ -54,73 +62,17 @@ public class RotomListener extends ListenerAdapter {
 //            System.out.println(rawMessage);
 //            System.out.println("my id is " + myID);
 
-            System.out.println("id: " + MessageUtils.mentionToUserID(messageTokens[0]));
+//            System.out.println("id: " + MessageUtils.mentionToUserID(messageTokens[0]));
             if (MessageUtils.mentionToUserID(messageTokens[0]).toString().equals(myID)) {
-//            if ("651588878968422411".equals("651588878968422411")) {
                 System.out.println("in the loop");
 
                 if (messageTokens.length >= 2 && messageTokens[1].equals("guess")) {
-                    whosThatPokemon(event);
-                }
-
-                else if (messageTokens.length >= 4 && messageTokens[1].equals("play") && messageTokens[2].equals("with")) {
-//                    initializeGame(event);
-                    List<User> invitedUsers = new ArrayList<>();
-                    for (int i = 3; i < messageTokens.length; ++i) {
-                        try {
-                            System.out.println(messageTokens[i]);
-                            if (MessageUtils.isUserMention(messageTokens[i])) {
-                                User target = sourceChannel.getJDA().getUserById(MessageUtils.mentionToUserID(messageTokens[i]));
-                                if (target.isBot()) {
-                                    throw new Exception(target.getName() + " is a bot! Bots do not know how to play Werewolf");
-                                }
-                                else if (target.getId().equals(author.getId())) {
-                                    throw new Exception("You are moderating this game! You cannot participate as well");
-                                }
-                                // DMListeners.put(target.getId(), author.getId());
-                                invitedUsers.add(target);
-                            }
-                            else {
-                                throw new Exception(messageTokens[i] + " is not a valid user");
-                            }
-                        }
-                        catch (Exception e) {
-                            event.getChannel().sendMessage(e.getMessage()).queue();
-                        }
+                    try {
+                        whosThatPokemon(event);
                     }
-                    // TODO: remove check and add it to session loop
-//                    if (invitedUsers.size() < WerewolfSession.MIN_PLAYER_COUNT) {
-//                        event.getChannel().sendMessage("You need at least " + WerewolfSession.MIN_PLAYER_COUNT + " valid players to play Werewolf").queue();
-//
-//                        for (User user : invitedUsers) {
-//                            user.openPrivateChannel().queue((channel) -> {
-//                                channel.sendMessage(author.getName() + " did not send enough invites. This game has been cancelled");
-//                            });
-//                            DMListeners.remove(user.getId());
-//                        }
-//                        sessions.remove(author.getId());
-//                    }
-
-//                    else { // TODO: check for players/moderator already in a session or moderating a session
-//                        WerewolfSession session = new WerewolfSession(sourceChannel, author, invitedUsers);
-//                        sessions.put(author.getId(), session);
-//                        Collection<String> userIDs = session.promptPlayers(); // TODO: if response list size == 0, end session
-//                        for (String userID : userIDs) {
-//                            DMListeners.put(userID, session.getModerator().getId());
-//                        }
-//                        DMListeners.put(author.getId(), author.getId());
-//                        try {
-//                            session.openInvites();
-//                        }
-//                        catch (Exception e) {
-//                            session.getChannel().sendMessage("Something went wrong with the session. Closing session").queue();
-//                            for (String id : session.getRoles().keySet()) {
-//                                DMListeners.remove(id);
-//                            }
-//                            DMListeners.remove(session.getModerator().getId());
-//                            sessions.remove(session.getModerator().getId());
-//                        }
-//                    }
+                    catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
                 else {
                     event.getChannel().sendMessage("I didn't quite get that").queue();
@@ -138,20 +90,8 @@ public class RotomListener extends ListenerAdapter {
         pokemonLinks = new HashMap<>();
         System.out.println("getting tables");
         Document doc = Jsoup.connect(bulbapedia + NATIONAL_DEX_ENDPOINT).get();
-//        Document doc = Jsoup.parse(new URL(bulbapedia + NATIONAL_DEX_ENDPOINT).openStream(), "UTF-8", bulbapedia + NATIONAL_DEX_ENDPOINT);
-//        System.out.println(doc.toString());
-//        System.out.println(doc.getAllElements());
-        Elements tableElements = doc
-                .getElementById("globalWrapper")
-                .getElementById("column-content")
-                .getElementById("content")
-                .getElementById("outercontentbox")
-                .getElementById("contentbox")
-                .getElementById("bodyContent")
-                .getElementById("mw-content-text")
-                .getElementsByTag("table");
+        Elements tableElements = getToBulbapediaContent(doc).getElementsByTag("table");
 
-        System.out.println("tables");
         for (int i = 0; i < tableElements.size(); ++i) {
             Element table = tableElements.get(i);
             if (table.attr("align").equals("center")) {
@@ -165,18 +105,81 @@ public class RotomListener extends ListenerAdapter {
                             .getElementsByTag("a").first();
                 String name = pokemonCell.attr("title");
                 String endpoint = pokemonCell.attr("href");
-                System.out.println(name + " : " + endpoint);
                 pokemonLinks.put(name, endpoint);
                 }
             }
         }
+        System.out.println("done");
     }
 
-    public void whosThatPokemon(MessageReceivedEvent event) {
+    public void whosThatPokemon(MessageReceivedEvent event) throws IOException {
         Random rng = new Random();
         Object[] pokemonNames = pokemonLinks.keySet().toArray();
         String pokemon = pokemonNames[rng.nextInt(pokemonNames.length)].toString();
+        Document doc = Jsoup.connect(bulbapedia + pokemonLinks.get(pokemon)).get();
 
-        event.getChannel().sendMessage(pokemon + ": " + bulbapedia + pokemonLinks.get(pokemon)).queue();
+        System.out.println(bulbapedia + pokemonLinks.get(pokemon));
+
+        String photoUrl = "https:" +  getToBulbapediaContent(doc)
+                .getElementsByClass("roundy").first()
+                .getElementsByTag("tbody").first()
+                .getElementsByTag("tr").first()
+                .getElementsByTag("td").first()
+                .getElementsByClass("roundy").first()
+                .getElementsByTag("tbody").first()
+                .child(1)
+                .getElementsByTag("td").first()
+                .getElementsByClass("roundy").first()
+                .getElementsByTag("tbody").first()
+                .getElementsByTag("tr").first()
+                .getElementsByTag("td").first()
+                .getElementsByTag("a").first()
+                .getElementsByTag("img").first()
+                .attr("src");
+
+        try (InputStream in = new URL(photoUrl).openStream()) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            in.transferTo(baos);
+
+            event.getChannel().sendMessage("Who's that pokemon?").queue();
+            event.getChannel().sendFile(shadowImage(new ByteArrayInputStream(baos.toByteArray())), "shadow.png").complete();
+            event.getChannel().sendMessage("It's " + pokemon + "!").queue();
+            event.getChannel().sendFile(new ByteArrayInputStream(baos.toByteArray()), pokemon + ".png").complete();
+        }
+    }
+
+    public InputStream shadowImage(InputStream imageStream) throws IOException {
+        BufferedImage image = ImageIO.read(imageStream);
+        int width = image.getWidth();
+        int height = image.getHeight();
+        WritableRaster raster = image.getRaster();
+
+        for (int xx = 0; xx < width; xx++) {
+            for (int yy = 0; yy < height; yy++) {
+                int[] pixels = raster.getPixel(xx, yy, (int[]) null);
+                if (pixels[3] != 0) {
+                    pixels[0] = 0;
+                    pixels[1] = 0;
+                    pixels[2] = 0;
+                    pixels[3] = 255;
+                }
+                raster.setPixel(xx, yy, pixels);
+            }
+        }
+
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        ImageIO.write(image,"png", os);
+        return new ByteArrayInputStream(os.toByteArray());
+    }
+
+    public Element getToBulbapediaContent(Document doc) {
+        return doc
+                .getElementById("globalWrapper")
+                .getElementById("column-content")
+                .getElementById("content")
+                .getElementById("outercontentbox")
+                .getElementById("contentbox")
+                .getElementById("bodyContent")
+                .getElementById("mw-content-text");
     }
 }
