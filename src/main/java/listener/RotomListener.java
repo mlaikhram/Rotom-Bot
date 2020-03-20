@@ -21,6 +21,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class RotomListener extends ListenerAdapter {
 
@@ -141,9 +142,9 @@ public class RotomListener extends ListenerAdapter {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             in.transferTo(baos);
 
-            event.getChannel().sendMessage("Who's that pokemon?").queue();
+            event.getChannel().sendMessage("Who's that pokemon?").complete();
             event.getChannel().sendFile(shadowImage(new ByteArrayInputStream(baos.toByteArray())), "shadow.png").complete();
-            event.getChannel().sendMessage("It's " + pokemon + "!").queue();
+            event.getChannel().sendMessage("It's " + pokemon + "!").completeAfter(10, TimeUnit.SECONDS);
             event.getChannel().sendFile(new ByteArrayInputStream(baos.toByteArray()), pokemon + ".png").complete();
         }
     }
@@ -157,11 +158,17 @@ public class RotomListener extends ListenerAdapter {
         for (int xx = 0; xx < width; xx++) {
             for (int yy = 0; yy < height; yy++) {
                 int[] pixels = raster.getPixel(xx, yy, (int[]) null);
-                if (pixels[3] != 0) {
+                if (pixels[3] >= 10) {
                     pixels[0] = 0;
                     pixels[1] = 0;
                     pixels[2] = 0;
                     pixels[3] = 255;
+                }
+                else {
+                    pixels[0] = 0;
+                    pixels[1] = 0;
+                    pixels[2] = 0;
+                    pixels[3] = 0;
                 }
                 raster.setPixel(xx, yy, pixels);
             }
