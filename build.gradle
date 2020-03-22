@@ -5,7 +5,7 @@ plugins {
 group 'matt.bot.discord'
 version '1.0-SNAPSHOT'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 1.11
 
 repositories {
     mavenCentral()
@@ -14,8 +14,20 @@ repositories {
 
 dependencies {
     compile 'net.dv8tion:JDA:4.1.1_101'
-    testCompile group: 'junit', name: 'junit', version: '4.12'
-
-    // https://mvnrepository.com/artifact/org.jsoup/jsoup
     compile group: 'org.jsoup', name: 'jsoup', version: '1.12.1'
+    compile group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.30'
+
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+jar {
+    manifest {
+        attributes (
+                "Main-Class": "Main"
+        )
+    }
+
+    from {
+        configurations.runtimeClasspath.findAll { !it.path.endsWith(".pom") }.collect { it.isDirectory() ? it : zipTree(it) }
+    }
 }

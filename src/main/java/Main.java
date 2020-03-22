@@ -17,7 +17,6 @@ public class Main{
         JDABuilder builder = new JDABuilder(AccountType.BOT);
         RotomListener rotomListener = new RotomListener(prop.getProperty("bulbapedia"));
         builder.setToken(prop.getProperty("token"));
-        System.out.println("Building bot");
         builder.addEventListeners(rotomListener);
         JDA jda = builder.build();
         rotomListener.setJDA(jda);
