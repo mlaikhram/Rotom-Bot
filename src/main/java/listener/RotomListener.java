@@ -1,5 +1,6 @@
 package listener;
 
+import model.GuessPokemon;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -19,6 +20,7 @@ import java.awt.image.WritableRaster;
 import java.io.*;
 import java.net.URL;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class RotomListener extends ListenerAdapter {
@@ -31,7 +33,7 @@ public class RotomListener extends ListenerAdapter {
     private final String bulbapedia;
 
     // Used to keep track of which channels have an active "who's that pokemon?" challenge
-    private final Set<String> activeWTPChannels;
+    private final Map<String, GuessPokemon> activeWTPChannels;
 
     private JDA jda;
 
@@ -41,7 +43,7 @@ public class RotomListener extends ListenerAdapter {
 
     public RotomListener(String bulbapedia) throws IOException {
         this.bulbapedia = bulbapedia;
-        this.activeWTPChannels = new HashSet<>();
+        this.activeWTPChannels = new HashMap<>();
         initializePokemonLinks();
     }
 
@@ -65,8 +67,11 @@ public class RotomListener extends ListenerAdapter {
             if (MessageUtils.isUserMention(messageTokens[0]) && MessageUtils.mentionToUserID(messageTokens[0]).toString().equals(myID)) {
                 logger.info("message received from " + author + ": " + rawMessage);
 
-                if (messageTokens.length >= 2 && messageTokens[1].equals("guess")) {
-                    if (!activeWTPChannels.contains(event.getChannel().getId())) {
+                if (messageTokens.length <= 1 || (messageTokens.length >= 2 && messageTokens[1].equals("help"))) {
+                    event.getChannel().sendMessage(MessageUtils.HELP_TEXT).queue();
+                }
+                else if (messageTokens.length >= 2 && messageTokens[1].equals("guess")) {
+                    if (!activeWTPChannels.containsKey(event.getChannel().getId())) {
                         logger.info("who's that pokemon?");
                         try {
                             int timer = DEFAULT_TIMER_SECONDS;
@@ -82,6 +87,16 @@ public class RotomListener extends ListenerAdapter {
                     else {
                         logger.error("channel: [" + event.getGuild().getName() + "][" + event.getChannel().getName() + "] already has an active \"Who's that Pokemon?\" session");
                         event.getChannel().sendMessage("Please wait for me to respond to the last request!").queue();
+                    }
+                }
+                else if (messageTokens.length >= 2 && messageTokens[1].equals("end")) {
+                    if (activeWTPChannels.containsKey(event.getChannel().getId())) {
+                        logger.info("cancelling \"Who's that Pokemon?\" session in channel: [" + event.getGuild().getName() + "][" + event.getChannel().getName() + "]");
+                        activeWTPChannels.get(event.getChannel().getId()).fastForward(activeWTPChannels);
+                    }
+                    else {
+                        logger.error("channel: [" + event.getGuild().getName() + "][" + event.getChannel().getName() + "] does not have an active \"Who's that Pokemon?\" session");
+                        event.getChannel().sendMessage("There is no active guessing game in this channel!").queue();
                     }
                 }
                 else {
@@ -125,7 +140,7 @@ public class RotomListener extends ListenerAdapter {
     }
 
     public void whosThatPokemon(MessageReceivedEvent event, int timer) throws IOException {
-        activeWTPChannels.add(event.getChannel().getId());
+        activeWTPChannels.put(event.getChannel().getId(), null);
         Random rng = new Random();
         Object[] pokemonNames = pokemonLinks.keySet().toArray();
         String pokemon = pokemonNames[rng.nextInt(pokemonNames.length)].toString();
@@ -158,10 +173,15 @@ public class RotomListener extends ListenerAdapter {
             event.getChannel().sendFile(shadowImage(new ByteArrayInputStream(baos.toByteArray())), "shadow.png").queue();
             logger.info("shadow image sent");
 
-            event.getChannel().sendMessage("It's " + pokemon + "!").queueAfter(timer, TimeUnit.SECONDS);
-            event.getChannel().sendFile(new ByteArrayInputStream(baos.toByteArray()), pokemon + ".png").queueAfter(timer, TimeUnit.SECONDS, (message) -> {
+            CompletableFuture<Message> namePromise = event.getChannel().sendMessage("It's " + pokemon + "!").submitAfter(timer, TimeUnit.SECONDS);
+            CompletableFuture<Message> imagePromise = event.getChannel().sendFile(new ByteArrayInputStream(baos.toByteArray()), pokemon + ".png").submitAfter(timer, TimeUnit.SECONDS);
+            imagePromise.thenAccept((message) -> {
                 activeWTPChannels.remove(event.getChannel().getId());
             });
+
+            GuessPokemon guessPokemon = new GuessPokemon(event, pokemon, baos, namePromise, imagePromise);
+            activeWTPChannels.put(event.getChannel().getId(), guessPokemon);
+
             logger.info("colored image sent");
         }
     }

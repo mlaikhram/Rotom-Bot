@@ -30,4 +30,11 @@ public class MessageUtils {
         }
         return matches;
     }
+
+    public static final String HELP_TEXT =
+            "@Rotom guess [guess time]\n" +
+            "Start a \"Who's that Pokemon?\" game session. I will reveal the answer in [guess time] seconds.\n" +
+            "\n" +
+            "@Rotom end\n" +
+            "End the current \"Who's that Pokemon?\" game session.\n";
 }
