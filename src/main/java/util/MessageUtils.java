@@ -32,8 +32,8 @@ public class MessageUtils {
     }
 
     public static final String HELP_TEXT =
-            "@Rotom guess [guess time]\n" +
-            "Start a \"Who's that Pokemon?\" game session. I will reveal the answer in [guess time] seconds.\n" +
+            "@Rotom guess [from gen [start gen] [to [end gen]]] [for [guess time]]\n" +
+            "Start a \"Who's that Pokemon?\" game session. I will select a Pokemon from [start gen] to [end gen] and reveal the answer in [guess time] seconds.\n" +
             "\n" +
             "@Rotom end\n" +
             "End the current \"Who's that Pokemon?\" game session.\n";

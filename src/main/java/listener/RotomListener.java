@@ -1,6 +1,7 @@
 package listener;
 
 import model.GuessPokemon;
+import model.PokemonGenerationTracker;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -37,13 +38,14 @@ public class RotomListener extends ListenerAdapter {
 
     private JDA jda;
 
-    // <Pokemon name, Bulbapedia link> used to pick a random pokemon
-    private Map<String, String> pokemonLinks;
+    // Pokemon Generation, Pokemon name, and Bulbapedia links used to pick a random pokemon
+    private final PokemonGenerationTracker pokemonGenerationTracker;
 
 
     public RotomListener(String bulbapedia) throws IOException {
         this.bulbapedia = bulbapedia;
         this.activeWTPChannels = new HashMap<>();
+        this.pokemonGenerationTracker = new PokemonGenerationTracker();
         initializePokemonLinks();
     }
 
@@ -61,25 +63,96 @@ public class RotomListener extends ListenerAdapter {
         User author = event.getAuthor();
         MessageChannel sourceChannel = event.getChannel();
         String rawMessage = event.getMessage().getContentRaw();
-        String[] messageTokens = rawMessage.split(" ");
+        String[] messageTokens = rawMessage.split("[ ]+");
 
         if (event.isFromType(ChannelType.TEXT)) {
-            if (MessageUtils.isUserMention(messageTokens[0]) && MessageUtils.mentionToUserID(messageTokens[0]).toString().equals(myID)) {
+            if (MessageUtils.isUserMention(messageTokens[0].trim()) && MessageUtils.mentionToUserID(messageTokens[0].trim()).toString().equals(myID)) {
                 logger.info("message received from " + author + ": " + rawMessage);
 
-                if (messageTokens.length <= 1 || (messageTokens.length >= 2 && messageTokens[1].equals("help"))) {
+                if (messageTokens.length <= 1 || (messageTokens.length >= 2 && messageTokens[1].trim().equals("help"))) {
                     event.getChannel().sendMessage(MessageUtils.HELP_TEXT).queue();
                 }
-                else if (messageTokens.length >= 2 && messageTokens[1].equals("guess")) {
+                else if (messageTokens.length >= 2 && messageTokens[1].trim().equals("guess")) {
                     if (!activeWTPChannels.containsKey(event.getChannel().getId())) {
                         logger.info("who's that pokemon?");
                         try {
                             int timer = DEFAULT_TIMER_SECONDS;
-                            if (messageTokens.length >= 3) {
-                                timer = NumberUtils.parseInt(messageTokens[2], DEFAULT_TIMER_SECONDS);
+                            boolean setTime = false;
+                            int startGen = 1;
+                            int endGen = 100;
+                            boolean setGens = false;
+                            int currentToken = 2;
+                            while (currentToken < messageTokens.length) {
+                                if (messageTokens[currentToken].trim().equals("for")) {
+                                    if (setTime) {
+                                        event.getChannel().sendMessage("You can only specify a time once").queue();
+                                        throw new Exception("invalid set time: " + messageTokens[currentToken]);
+                                    }
+                                    timer = -1;
+                                    ++currentToken;
+                                    if (currentToken < messageTokens.length) {
+                                        timer = NumberUtils.parseInt(messageTokens[currentToken].trim(), -1);
+                                    }
+                                    if (timer < 0) {
+                                        event.getChannel().sendMessage("Please specify a valid number of seconds").queue();
+                                        throw new Exception("invalid set time: " + messageTokens[currentToken]);
+                                    }
+                                    setTime = true;
+                                }
+                                else if (messageTokens[currentToken].trim().equals("from")) {
+                                    if (setGens) {
+                                        event.getChannel().sendMessage("You can only specify a gen range once").queue();
+                                        throw new Exception("invalid set gen: " + messageTokens[currentToken]);
+                                    }
+                                    ++currentToken;
+                                    if (currentToken < messageTokens.length && messageTokens[currentToken].trim().equals("gen")) {
+                                        ++currentToken;
+                                        if (currentToken < messageTokens.length) {
+                                            startGen = NumberUtils.parseInt(messageTokens[currentToken].trim(), -1);
+                                            endGen = NumberUtils.parseInt(messageTokens[currentToken].trim(), -1);
+                                            if (startGen < 1) {
+                                                event.getChannel().sendMessage("Please specify a valid gen").queue();
+                                                throw new Exception("invalid set gen: " + messageTokens[currentToken]);
+                                            }
+                                            else if (++currentToken < messageTokens.length && messageTokens[currentToken].trim().equals("to")) {
+                                                ++currentToken;
+                                                if (currentToken < messageTokens.length) {
+                                                    endGen = NumberUtils.parseInt(messageTokens[currentToken].trim(), -1);
+                                                    if (endGen < startGen) {
+                                                        event.getChannel().sendMessage("Please specify a valid gen range").queue();
+                                                        throw new Exception("invalid set gen range: " + messageTokens[currentToken]);
+                                                    }
+                                                }
+                                                else {
+                                                    event.getChannel().sendMessage("Please specify a valid gen range").queue();
+                                                    throw new Exception("invalid set gen range: " + messageTokens[currentToken]);
+                                                }
+                                            }
+                                            else if (currentToken < messageTokens.length) {
+                                                if (messageTokens[currentToken].trim().equals("for")) {
+                                                    --currentToken;
+                                                }
+                                                else {
+                                                    event.getChannel().sendMessage("If you want to specify a gen range, use format \"from [start gen] to [end gen]\"").queue();
+                                                    throw new Exception("invalid set gen: " + messageTokens[currentToken]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        event.getChannel().sendMessage("Please specify a valid gen").queue();
+                                        throw new Exception("invalid set gen: " + messageTokens[currentToken]);
+                                    }
+                                    setGens = true;
+                                }
+                                else {
+                                    event.getChannel().sendMessage("I didn't quite get that").queue();
+                                    throw new Exception("invalid arg: " + messageTokens[currentToken]);
+                                }
+                                ++currentToken;
                             }
-                            whosThatPokemon(event, timer);
-                        } catch (IOException e) {
+                            whosThatPokemon(event, timer, startGen, endGen);
+                        } catch (Exception e) {
                             logger.error(e.getMessage());
                             e.printStackTrace();
                         }
@@ -89,7 +162,7 @@ public class RotomListener extends ListenerAdapter {
                         event.getChannel().sendMessage("Please wait for me to respond to the last request!").queue();
                     }
                 }
-                else if (messageTokens.length >= 2 && messageTokens[1].equals("end")) {
+                else if (messageTokens.length >= 2 && messageTokens[1].trim().equals("end")) {
                     if (activeWTPChannels.containsKey(event.getChannel().getId())) {
                         logger.info("cancelling \"Who's that Pokemon?\" session in channel: [" + event.getGuild().getName() + "][" + event.getChannel().getName() + "]");
                         activeWTPChannels.get(event.getChannel().getId()).fastForward(activeWTPChannels);
@@ -114,12 +187,17 @@ public class RotomListener extends ListenerAdapter {
     }
 
     public void initializePokemonLinks() throws IOException {
-        pokemonLinks = new HashMap<>();
         logger.info("getting pokemon names and image links from " + bulbapedia + NATIONAL_DEX_ENDPOINT);
         Document doc = Jsoup.connect(bulbapedia + NATIONAL_DEX_ENDPOINT).get();
         Elements tableElements = getToBulbapediaContent(doc).getElementsByTag("table");
 
-        for (int i = 0; i < tableElements.size(); ++i) {
+        // skip first table as it is garbage
+        for (int i = 1; i < tableElements.size(); ++i) {
+            logger.info("reading table " + i);
+            // only add a new gen if the previous gen is gen 0 or the previous gen is not empty
+            if (pokemonGenerationTracker.genCount() <= 1 || pokemonGenerationTracker.pokemonCount(pokemonGenerationTracker.genCount() - 1) > 0) {
+                pokemonGenerationTracker.addGen();
+            }
             Element table = tableElements.get(i);
             if (table.attr("align").equals("center")) {
                 Elements rows = table
@@ -131,22 +209,29 @@ public class RotomListener extends ListenerAdapter {
                             .getElementsByTag("th").first()
                             .getElementsByTag("a").first();
                 String name = pokemonCell.attr("title");
+                if (name.startsWith("File:")) {
+                    logger.error("invalid pokemon found: " + name);
+                    continue;
+                }
                 String endpoint = pokemonCell.attr("href");
-                pokemonLinks.put(name, endpoint);
+                pokemonGenerationTracker.addPokemon(name, endpoint);
                 }
             }
         }
+        pokemonGenerationTracker.trimEmptyGens();
+        pokemonGenerationTracker.print();
         logger.info("done");
     }
 
-    public void whosThatPokemon(MessageReceivedEvent event, int timer) throws IOException {
+    public void whosThatPokemon(MessageReceivedEvent event, int timer, int startGen, int endGen) throws IOException {
         activeWTPChannels.put(event.getChannel().getId(), null);
         Random rng = new Random();
-        Object[] pokemonNames = pokemonLinks.keySet().toArray();
+        Map<String, String> pokemonPool = pokemonGenerationTracker.getPokemonByGen(startGen, endGen);
+        Object[] pokemonNames = pokemonPool.keySet().toArray();
         String pokemon = pokemonNames[rng.nextInt(pokemonNames.length)].toString();
-        Document doc = Jsoup.connect(bulbapedia + pokemonLinks.get(pokemon)).get();
+        Document doc = Jsoup.connect(bulbapedia + pokemonPool.get(pokemon)).get();
 
-        logger.info("getting pokemon image from " + bulbapedia + pokemonLinks.get(pokemon));
+        logger.info("getting pokemon image from " + bulbapedia + pokemonPool.get(pokemon));
 
         String photoUrl = "https:" +  getToBulbapediaContent(doc)
                 .getElementsByClass("roundy").first()
