@@ -15,7 +15,7 @@ Replace `<BOT_TOKEN>` with the token obtained from your own Discord Bot (More de
 ```
 java -jar rotom-bot-1.0-SNAPSHOT.jar
 ```
-Once the Bot is running, you can invite it to your Discord Server from the [Discord Developer Portal](https://discord.com/developers/applications) and interact with it from the your text channels.
+Once the Bot is running, you can invite it to your Discord Server from the [Discord Developer Portal](https://discord.com/developers/applications) and interact with it from your text channels.
 
 ### Usage
 `@Rotom guess [from gen [start gen] [to [end gen]]] [for [guess time]]`
