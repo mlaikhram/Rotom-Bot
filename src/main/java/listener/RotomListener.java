@@ -61,10 +61,8 @@ public class RotomListener extends ListenerAdapter {
 
         String myID = jda.getSelfUser().getId();
         User author = event.getAuthor();
-        MessageChannel sourceChannel = event.getChannel();
         String rawMessage = event.getMessage().getContentRaw();
         String[] messageTokens = rawMessage.split("[ ]+");
-
         if (event.isFromType(ChannelType.TEXT)) {
             if (MessageUtils.isUserMention(messageTokens[0].trim()) && MessageUtils.mentionToUserID(messageTokens[0].trim()).toString().equals(myID)) {
                 logger.info("message received from " + author + ": " + rawMessage);
