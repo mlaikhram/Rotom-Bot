@@ -307,9 +307,8 @@ public class RotomListener extends ListenerAdapter {
                 .getElementById("globalWrapper")
                 .getElementById("column-content")
                 .getElementById("content")
-                .getElementById("outercontentbox")
-                .getElementById("contentbox")
                 .getElementById("bodyContent")
-                .getElementById("mw-content-text");
+                .getElementById("mw-content-text")
+                .getElementsByClass("mw-parser-output").first();
     }
 }
